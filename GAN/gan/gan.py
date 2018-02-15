@@ -1,3 +1,4 @@
+### -*-coding:utf-8-*-
 from __future__ import print_function, division
 
 from keras.datasets import mnist
@@ -16,37 +17,27 @@ import numpy as np
 
 class GAN():
     def __init__(self):
+        #mnistデータ用の入力データサイズ
         self.img_rows = 28 
         self.img_cols = 28
         self.channels = 1
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-
+        
         optimizer = Adam(0.0002, 0.5)
 
-        # Build and compile the discriminator
+        # discriminatorモデル
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy', 
             optimizer=optimizer,
             metrics=['accuracy'])
 
-        # Build and compile the generator
+        # Generatorモデル
         self.generator = self.build_generator()
-        self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
+        # generatorは単体で学習しないのでコンパイルは必要ない
+        #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
 
-        # The generator takes noise as input and generated imgs
-        z = Input(shape=(100,))
-        img = self.generator(z)
-
-        # For the combined model we will only train the generator
-        self.discriminator.trainable = False
-
-        # The valid takes generated images as input and determines validity
-        valid = self.discriminator(img)
-
-        # The combined model  (stacked generator and discriminator) takes
-        # noise as input => generates images => determines validity 
-        self.combined = Model(z, valid)
-        #self.combined = self.build_combined()
+        self.combined = self.build_combined1()
+        #self.combined = self.build_combined2()
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
 
     def build_generator(self):
@@ -94,10 +85,22 @@ class GAN():
 
         #return Model(img, validity)
         return model
-	
-    def build_combined(self):
+    
+    def build_combined1(self):
+        self.discriminator.trainable = False
         model = Sequential([self.generator, self.discriminator])
         return model
+
+    def build_combined2(self):
+        z = Input(shape=(100,))
+        img = self.generator(z)
+        self.discriminator.trainable = False
+        valid = self.discriminator(img)
+        model = Model(z, valid)
+        model.summary()
+        return model
+
+
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
