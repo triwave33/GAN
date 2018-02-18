@@ -43,7 +43,6 @@ class GAN():
     def build_generator(self):
 
         noise_shape = (100,)
-        
         model = Sequential()
 
         model.add(Dense(256, input_shape=noise_shape))
@@ -60,10 +59,6 @@ class GAN():
 
         model.summary()
 
-        noise = Input(shape=noise_shape)
-        img = model(noise)
-
-        #return Model(noise, img)
         return model
 
     def build_discriminator(self):
@@ -80,10 +75,6 @@ class GAN():
         model.add(Dense(1, activation='sigmoid'))
         model.summary()
 
-        img = Input(shape=img_shape)
-        validity = model(img)
-
-        #return Model(img, validity)
         return model
     
     def build_combined1(self):
@@ -104,10 +95,10 @@ class GAN():
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
-        # Load the dataset
+        # mnistデータの読み込み
         (X_train, _), (_, _) = mnist.load_data()
 
-        # Rescale -1 to 1
+        # 値を-1 to 1に企画課
         X_train = (X_train.astype(np.float32) - 127.5) / 127.5
         X_train = np.expand_dims(X_train, axis=3)
 
@@ -116,50 +107,53 @@ class GAN():
         for epoch in range(epochs):
 
             # ---------------------
-            #  Train Discriminator
+            #  Discriminatorの学習
             # ---------------------
 
-            # Select a random half batch of images
+            # バッチサイズの半数を教師データからピックアップ
             idx = np.random.randint(0, X_train.shape[0], half_batch)
             imgs = X_train[idx]
 
             noise = np.random.normal(0, 1, (half_batch, 100))
 
-            # Generate a half batch of new images
+            # バッチサイズの半数をGeneratorから生成
             gen_imgs = self.generator.predict(noise)
 
-            # Train the discriminator
+            # discriminatorを学習
+            # 本物データと偽物データは別々に学習させる
             d_loss_real = self.discriminator.train_on_batch(imgs, np.ones((half_batch, 1)))
             d_loss_fake = self.discriminator.train_on_batch(gen_imgs, np.zeros((half_batch, 1)))
+            # それぞれの損失関数を平均
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
 
             # ---------------------
-            #  Train Generator
+            #  Generatorの学習
             # ---------------------
 
             noise = np.random.normal(0, 1, (batch_size, 100))
 
-            # The generator wants the discriminator to label the generated samples
-            # as valid (ones)
+            # 生成データの正解ラベルは本物（1） 
             valid_y = np.array([1] * batch_size)
 
             # Train the generator
             g_loss = self.combined.train_on_batch(noise, valid_y)
 
-            # Plot the progress
+            # 進捗の表示
             print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
 
-            # If at save interval => save generated image samples
+            # 指定した間隔で生成画像を保存
             if epoch % save_interval == 0:
                 self.save_imgs(epoch)
 
     def save_imgs(self, epoch):
+        # 生成画像を敷き詰めるときの行数、列数
         r, c = 5, 5
+
         noise = np.random.normal(0, 1, (r * c, 100))
         gen_imgs = self.generator.predict(noise)
 
-        # Rescale images 0 - 1
+        # 生成画像を0-1に再スケール
         gen_imgs = 0.5 * gen_imgs + 0.5
 
         fig, axs = plt.subplots(r, c)
