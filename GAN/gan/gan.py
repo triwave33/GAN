@@ -24,7 +24,7 @@ class GAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        seld.z_dim = 100
+        self.z_dim = 100
 
         optimizer = Adam(0.0002, 0.5)
 
