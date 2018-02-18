@@ -23,6 +23,9 @@ class GAN():
         self.channels = 1
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
+        # 潜在変数の次元数 
+        seld.z_dim = 100
+
         optimizer = Adam(0.0002, 0.5)
 
         # discriminatorモデル
@@ -42,7 +45,7 @@ class GAN():
 
     def build_generator(self):
 
-        noise_shape = (100,)
+        noise_shape = (self.z_dim,)
         model = Sequential()
 
         model.add(Dense(256, input_shape=noise_shape))
@@ -83,7 +86,7 @@ class GAN():
         return model
 
     def build_combined2(self):
-        z = Input(shape=(100,))
+        z = Input(shape=(self.z_dim,))
         img = self.generator(z)
         self.discriminator.trainable = False
         valid = self.discriminator(img)
@@ -98,7 +101,7 @@ class GAN():
         # mnistデータの読み込み
         (X_train, _), (_, _) = mnist.load_data()
 
-        # 値を-1 to 1に企画課
+        # 値を-1 to 1に規格化
         X_train = (X_train.astype(np.float32) - 127.5) / 127.5
         X_train = np.expand_dims(X_train, axis=3)
 
@@ -110,14 +113,14 @@ class GAN():
             #  Discriminatorの学習
             # ---------------------
 
+            # バッチサイズの半数をGeneratorから生成
+            noise = np.random.normal(0, 1, (half_batch, self.z_dim))
+            gen_imgs = self.generator.predict(noise)
+
+
             # バッチサイズの半数を教師データからピックアップ
             idx = np.random.randint(0, X_train.shape[0], half_batch)
             imgs = X_train[idx]
-
-            noise = np.random.normal(0, 1, (half_batch, 100))
-
-            # バッチサイズの半数をGeneratorから生成
-            gen_imgs = self.generator.predict(noise)
 
             # discriminatorを学習
             # 本物データと偽物データは別々に学習させる
@@ -131,7 +134,7 @@ class GAN():
             #  Generatorの学習
             # ---------------------
 
-            noise = np.random.normal(0, 1, (batch_size, 100))
+            noise = np.random.normal(0, 1, (batch_size, self.z_dim))
 
             # 生成データの正解ラベルは本物（1） 
             valid_y = np.array([1] * batch_size)
@@ -150,7 +153,7 @@ class GAN():
         # 生成画像を敷き詰めるときの行数、列数
         r, c = 5, 5
 
-        noise = np.random.normal(0, 1, (r * c, 100))
+        noise = np.random.normal(0, 1, (r * c, self.z_dim))
         gen_imgs = self.generator.predict(noise)
 
         # 生成画像を0-1に再スケール
