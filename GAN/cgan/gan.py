@@ -5,7 +5,7 @@ from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
+from keras.layers.convolutional import UpSampling2D, Convolution2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 
@@ -44,42 +44,39 @@ class GAN():
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
 
     def build_generator(self):
-
-        noise_shape = (self.z_dim,)
         model = Sequential()
-
-        model.add(Dense(256, input_shape=noise_shape))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(1024))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(Reshape(self.img_shape))
-
-        model.summary()
-
+        model.add(Dense(input_dim=100, output_dim=1024))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Dense(128*7*7))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Reshape((128, 7, 7), input_shape=(128*7*7,)))
+        model.add(UpSampling2D((2, 2)))
+        model.add(Convolution2D(64, 5, 5, border_mode='same'))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(UpSampling2D((2, 2)))
+        model.add(Convolution2D(1, 5, 5, border_mode='same'))
+        model.add(Activation('tanh'))
         return model
 
     def build_discriminator(self):
-
-        img_shape = (self.img_rows, self.img_cols, self.channels)
-        
         model = Sequential()
-
-        model.add(Flatten(input_shape=img_shape))
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
+        model.add(Convolution2D(64, 5, 5,
+                                subsample=(2, 2),
+                                border_mode='same',
+                                input_shape=(1, 28, 28)))
+        model.add(LeakyReLU(0.2))
+        model.add(Convolution2D(128, 5, 5, subsample=(2, 2)))
+        model.add(LeakyReLU(0.2))
+        model.add(Flatten())
         model.add(Dense(256))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(1, activation='sigmoid'))
-        model.summary()
+        model.add(LeakyReLU(0.2))
+        model.add(Dropout(0.5))
+        model.add(Dense(1))
+        model.add(Activation('sigmoid'))   
 
-        return model
-    
     def build_combined1(self):
         self.discriminator.trainable = False
         model = Sequential([self.generator, self.discriminator])

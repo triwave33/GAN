@@ -5,7 +5,7 @@ from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
+from keras.layers.convolutional import UpSampling2D, Convolution2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 
@@ -24,14 +24,15 @@ class GAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 100
+        self.z_dim = 50
 
-        optimizer = Adam(0.0002, 0.5)
+        discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
+        combined_optimizer = Adam(lr=2e-4, beta_1=0.5)
 
         # discriminatorモデル
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy', 
-            optimizer=optimizer,
+            optimizer=discriminator_optimizer,
             metrics=['accuracy'])
 
         # Generatorモデル
@@ -41,27 +42,27 @@ class GAN():
 
         self.combined = self.build_combined1()
         #self.combined = self.build_combined2()
-        self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
+        self.combined.compile(loss='binary_crossentropy', optimizer=combined_optimizer)
 
     def build_generator(self):
 
         noise_shape = (self.z_dim,)
         model = Sequential()
-
-        model.add(Dense(256, input_shape=noise_shape))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(1024))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(Reshape(self.img_shape))
-
+        model.add(Dense(input_dim = self.z_dim, output_dim=1024))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Dense(128*7*7))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
+        model.add(UpSampling2D((2,2)))
+        model.add(Convolution2D(64,5,5,border_mode='same'))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(UpSampling2D((2,2)))
+        model.add(Convolution2D(1,5,5,border_mode='same'))
+        model.add(Activation('tanh'))
         model.summary()
-
         return model
 
     def build_discriminator(self):
@@ -69,15 +70,16 @@ class GAN():
         img_shape = (self.img_rows, self.img_cols, self.channels)
         
         model = Sequential()
-
-        model.add(Flatten(input_shape=img_shape))
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
+        model.add(Convolution2D(64,5,5, subsample=(2,2),\
+                  border_mode='same', input_shape=(28,28,1)))
+        model.add(LeakyReLU(0.2))
+        model.add(Convolution2D(128,5,5,subsample=(2,2)))
+        model.add(LeakyReLU(0.2))
+        model.add(Flatten())
         model.add(Dense(256))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(1, activation='sigmoid'))
-        model.summary()
-
+        model.add(LeakyReLU(0.2))
+        model.add(Dropout(0.5))
+        model.add(Dense(1))
         return model
     
     def build_combined1(self):
@@ -107,52 +109,47 @@ class GAN():
 
         half_batch = int(batch_size / 2)
 
-        num_batches = int(X_train.shape[0] / half_batch)
-        print('Number of batches:', num_batches)
-        
         for epoch in range(epochs):
 
-            for iteration in range(num_batches):
+            # ---------------------
+            #  Discriminatorの学習
+            # ---------------------
 
-                # ---------------------
-                #  Discriminatorの学習
-                # ---------------------
-
-                # バッチサイズの半数をGeneratorから生成
-                noise = np.random.normal(0, 1, (half_batch, self.z_dim))
-                gen_imgs = self.generator.predict(noise)
+            # バッチサイズの半数をGeneratorから生成
+            noise = np.random.normal(0, 1, (half_batch, self.z_dim))
+            gen_imgs = self.generator.predict(noise)
 
 
-                # バッチサイズの半数を教師データからピックアップ
-                idx = np.random.randint(0, X_train.shape[0], half_batch)
-                imgs = X_train[idx]
+            # バッチサイズの半数を教師データからピックアップ
+            idx = np.random.randint(0, X_train.shape[0], half_batch)
+            imgs = X_train[idx]
 
-                # discriminatorを学習
-                # 本物データと偽物データは別々に学習させる
-                d_loss_real = self.discriminator.train_on_batch(imgs, np.ones((half_batch, 1)))
-                d_loss_fake = self.discriminator.train_on_batch(gen_imgs, np.zeros((half_batch, 1)))
-                # それぞれの損失関数を平均
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            # discriminatorを学習
+            # 本物データと偽物データは別々に学習させる
+            d_loss_real = self.discriminator.train_on_batch(imgs, np.ones((half_batch, 1)))
+            d_loss_fake = self.discriminator.train_on_batch(gen_imgs, np.zeros((half_batch, 1)))
+            # それぞれの損失関数を平均
+            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
 
-                # ---------------------
-                #  Generatorの学習
-                # ---------------------
+            # ---------------------
+            #  Generatorの学習
+            # ---------------------
 
-                noise = np.random.normal(0, 1, (batch_size, self.z_dim))
+            noise = np.random.normal(0, 1, (batch_size, self.z_dim))
 
-                # 生成データの正解ラベルは本物（1） 
-                valid_y = np.array([1] * batch_size)
+            # 生成データの正解ラベルは本物（1） 
+            valid_y = np.array([1] * batch_size)
 
-                # Train the generator
-                g_loss = self.combined.train_on_batch(noise, valid_y)
+            # Train the generator
+            g_loss = self.combined.train_on_batch(noise, valid_y)
 
-                # 進捗の表示
-                print ("epoch:%d, iter:%d,  [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, iteration, d_loss[0], 100*d_loss[1], g_loss))
+            # 進捗の表示
+            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
 
-                # 指定した間隔で生成画像を保存
-                if epoch % save_interval == 0:
-                    self.save_imgs(epoch)
+            # 指定した間隔で生成画像を保存
+            if epoch % save_interval == 0:
+                self.save_imgs(epoch)
 
     def save_imgs(self, epoch):
         # 生成画像を敷き詰めるときの行数、列数
@@ -177,7 +174,7 @@ class GAN():
 
 if __name__ == '__main__':
     gan = GAN()
-    gan.train(epochs=30000, batch_size=32, save_interval=1)
+    gan.train(epochs=30000, batch_size=32, save_interval=200)
 
 
 
