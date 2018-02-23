@@ -48,7 +48,7 @@ class GAN():
 
         noise_shape = (self.z_dim,)
         model = Sequential()
-        model.add(Dense(input_dim = self.z_dim, output_dim=1024))
+        model.add(Dense(1024, input_shape=noise_shape))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Dense(128*7*7))
@@ -71,7 +71,7 @@ class GAN():
         
         model = Sequential()
         model.add(Convolution2D(64,5,5, subsample=(2,2),\
-                  border_mode='same', input_shape=(28,28,1)))
+                  border_mode='same', input_shape=img_shape))
         model.add(LeakyReLU(0.2))
         model.add(Convolution2D(128,5,5,subsample=(2,2)))
         model.add(LeakyReLU(0.2))
@@ -80,6 +80,7 @@ class GAN():
         model.add(LeakyReLU(0.2))
         model.add(Dropout(0.5))
         model.add(Dense(1))
+        model.add(Activation('sigmoid'))   
         return model
     
     def build_combined1(self):
