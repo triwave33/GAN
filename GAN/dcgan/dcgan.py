@@ -16,6 +16,8 @@ import sys
 import numpy as np
 
 class GAN():
+
+    
     def __init__(self):
         #mnistデータ用の入力データサイズ
         self.img_rows = 28 
@@ -25,6 +27,15 @@ class GAN():
         
         # 潜在変数の次元数 
         self.z_dim = 50
+
+        # 画像保存の際の列、行数
+        self.row = 5
+        self.col = 5
+        
+        # 画像生成用の固定された入力潜在変数
+        self.noise_fix1 = np.random.normal(0, 1, (self.row * self.col, self.z_dim))
+        self.noise_fix2 = np.random.normal(0, 1, (1, self.z_dim))
+        self.noise_fix3 = np.random.normal(0, 1, (1, self.z_dim))
 
         discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
         combined_optimizer = Adam(lr=2e-4, beta_1=0.5)
@@ -150,32 +161,44 @@ class GAN():
 
             # 指定した間隔で生成画像を保存
             if epoch % save_interval == 0:
-                self.save_imgs(epoch)
+                noise = np.random.normal(0, 1, (self.row * self.col, self.z_dim))
+                # 毎回異なる乱数から画像を生成
+                self.save_imgs(epoch, '', noise)
+                # 毎回同じ値から画像を生成
+                self.save_imgs(epoch, 'fromFixedValue', self.noise_fix1)
+                # 二つの潜在変数の間の遷移画像を生成
+                total_images = self.row*self.col
+                noise_trans = np.zeros((total_images, self.z_dim))
+                for i in range(total_images):
+                    t = (i*1.)/(total_images*1.)
+                    noise_trans[i,:] = t * self.noise_fix2 + (1-t) * self.noise_fix3
+                self.save_imgs(epoch, 'trans', noise_trans)
 
-    def save_imgs(self, epoch):
+                
+
+    def save_imgs(self, epoch, filename, noise):
+        # row, col
         # 生成画像を敷き詰めるときの行数、列数
-        r, c = 5, 5
 
-        noise = np.random.normal(0, 1, (r * c, self.z_dim))
         gen_imgs = self.generator.predict(noise)
 
         # 生成画像を0-1に再スケール
         gen_imgs = 0.5 * gen_imgs + 0.5
 
-        fig, axs = plt.subplots(r, c)
+        fig, axs = plt.subplots(self.row, self.col)
         cnt = 0
-        for i in range(r):
-            for j in range(c):
+        for i in range(self.row):
+            for j in range(self.col):
                 axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
                 axs[i,j].axis('off')
                 cnt += 1
-        fig.savefig("images/mnist_%d.png" % epoch)
+        fig.savefig("images/mnist_%s_%d.png" % (filename, epoch))
         plt.close()
 
 
 if __name__ == '__main__':
     gan = GAN()
-    gan.train(epochs=30000, batch_size=32, save_interval=200)
+    gan.train(epochs=30000, batch_size=32, save_interval=500)
 
 
 
