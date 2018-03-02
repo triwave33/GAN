@@ -6,7 +6,8 @@ from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import UpSampling2D, Convolution2D
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
+
 from keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
@@ -26,7 +27,7 @@ class DCGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 50
+        self.z_dim = 5
 
         # 画像保存の際の列、行数
         self.row = 5
@@ -45,6 +46,7 @@ class DCGAN():
         self.d_loss_array = np.array([])
         self.d_accuracy_array = np.array([])
         self.d_predict_true_num_array = np.array([])
+        self.c_predict_class_list = []
 
         discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
         combined_optimizer = Adam(lr=2e-4, beta_1=0.5)
@@ -63,6 +65,9 @@ class DCGAN():
         self.combined = self.build_combined1()
         #self.combined = self.build_combined2()
         self.combined.compile(loss='binary_crossentropy', optimizer=combined_optimizer)
+
+        # Classifierモデル
+        self.classifier = self.build_classifier()
 
     def build_generator(self):
 
@@ -117,6 +122,11 @@ class DCGAN():
         model.summary()
         return model
 
+    def build_classifier(self):
+        model = load_model("cnn_model.h5")
+        model.load_weights('cnn_weight.h5')
+        return model
+
 
 
     def train(self, epochs, batch_size=128, save_interval=50):
@@ -161,6 +171,9 @@ class DCGAN():
             d_predict = self.discriminator.predict_classes(np.concatenate([gen_imgs,imgs]), verbose=0)
             d_predict = np.sum(d_predict)
 
+# classifierの予測
+            c_predict = self.classifier.predict_classes(np.concatenate([gen_imgs,imgs]), verbose=0)
+
 
             # ---------------------
             #  Generatorの学習
@@ -184,6 +197,7 @@ class DCGAN():
             self.d_loss_array[epoch] = d_loss[0]
             self.d_accuracy_array[epoch] = 100*d_loss[1]
             self.d_predict_true_num_array[epoch] = d_predict
+            self.c_predict_class_list.append(c_predict)
 
             if epoch % save_interval == 0:
                 
@@ -198,12 +212,18 @@ class DCGAN():
                     t = (i*1.)/((total_images-1)*1.)
                     noise_trans[i,:] = t * self.noise_fix2 + (1-t) * self.noise_fix3
                 self.save_imgs(self.row2, self.col2, epoch, 'trans', noise_trans)
+
+                # classifierに生成画像のクラス識別をさせる（10000サンプル）
+                noise = np.random.normal(0, 1, (10000, self.z_dim))
+                class_res = self.classifier.predict_classes(self.generator.predict(noise), verbose=0)
+                # plot histgram
+                plt.hist(class_res)
+                plt.savefig(self.path + "mnist_hist_%d.png" % epoch)
+                plt.ylim(0,2000)
+                plt.close()
+
+
        
-
-                # 重みを保存
-                self.generator.save_weights(self.path + "generator_%s.h5" % epoch)
-                self.discriminator.save_weights(self.path + "discriminator_%s.h5" % epoch)
-
                 # 学習結果をプロット
                 fig, ax = plt.subplots(4,1, figsize=(8.27,11.69))
                 ax[0].plot(self.g_loss_array[:epoch])
@@ -217,6 +237,11 @@ class DCGAN():
                 fig.suptitle("epoch: %5d" % epoch)
                 fig.savefig(self.path + "training_%d.png" % epoch)
                 plt.close()
+
+        # 重みを保存
+        self.generator.save_weights(self.path + "generator_%s.h5" % epoch)
+        self.discriminator.save_weights(self.path + "discriminator_%s.h5" % epoch)
+
 
             
 
@@ -252,7 +277,7 @@ class DCGAN():
  
 if __name__ == '__main__':
     gan = DCGAN()
-    gan.train(epochs=30000, batch_size=32, save_interval=1000)
+    gan.train(epochs=100000, batch_size=32, save_interval=1000)
 
 
 

@@ -14,4 +14,4 @@ for f in files:
 
 images[0].save(wd + 'pillow_imagedraw.gif',\
                save_all=True, append_images=images[1:],\
-			   optimize=False, duration=200, loop=0)
+			   optimize=False, duration=40, loop=0)
