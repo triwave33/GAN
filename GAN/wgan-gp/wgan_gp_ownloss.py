@@ -18,7 +18,7 @@ from functools import partial
 
 BATCH_SIZE = 32
 GRADIENT_PENALTY_WEIGHT = 10
-TRAINING_RATIO = 1
+TRAINING_RATIO = 5
 
 class WGAN_GP():
     
@@ -32,7 +32,7 @@ class WGAN_GP():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 500
+        self.z_dim = 100
 
         self.n_critic = 5
 
@@ -80,11 +80,8 @@ class WGAN_GP():
         #self.combined = self.build_combined2()
         self.combined.compile(optimizer= Adam(0.0001, beta_1=0.5, beta_2=0.9),\
                                         loss=self.wasserstein_loss)
-										#metrics=['accuracy'])
+                                        #metrics=['accuracy'])
 
-        self.g_loss = -1*K.mean(self.combined(noise))
-		self.g_updates = Adam(lr=0.0001, beta_1=0.5, beta_2=0.9).get_updates(self.discriminator.trainable_weights,[],self.g_loss)
-		netG_train = K.function([
 
         for layer in self.discriminator.layers:
             layer.trainable = True
@@ -191,6 +188,35 @@ class WGAN_GP():
                       outputs=[d_output_real, d_output_gen, d_output_ave])
         return model, partial_gp_loss
 
+    def build_discriminator_with_own_loss(self):
+        img_shape = (self.img_rows, self.img_cols, self.channels)
+        img_input = Input(shape=(img_shape))
+        g_input = Input(shape=(self.z_dim,))
+        g_output = self.generator(g_input)
+
+        e_input = K.placeholder(shape=(None,1,1,1))
+        mixed_input = Input(shape=(img_shape),\
+                        tensor=e_input * img_input + (1-e_input) * g_output)
+
+        loss_real = K.mean(self.discriminator(img_input))
+        loss_fake = K.mean(self.discriminator(g_output))
+
+        grad_mixed = K.gradients(self.discriminator(mixed_input),\
+                        [mixed_input])[0]
+        norm_grad_mixed = K.sqrt(K.sum(K.square(grad_mixed), axis=[1,2,3]))
+        grad_penalty = K.mean(K.square(norm_grad_mixed -1))
+
+        loss = loss_fake - loss_real + GRADIENT_PENALTY_WEIGHT * grad_penalty
+
+        training_updates = Adam(lr=0.0001, beta_1=0.5, beta_2=0.9)\
+                            .get_updates(self.discriminator.trainable_weights,[],loss)
+
+        d_train = K.function([img_input, g_input, e_input],\
+                                [loss_real, loss_fake],    \
+                                training_updates)
+
+        return d_train
+
  
       
 
@@ -221,6 +247,8 @@ class WGAN_GP():
         negative_y = -positive_y
         dummy_y = np.zeros((batch_size, 1), dtype=np.float32)
 
+        netD_train = self.build_discriminator_with_own_loss()
+
         for epoch in range(epochs):
 
             for j in range(TRAINING_RATIO):
@@ -229,18 +257,21 @@ class WGAN_GP():
                 #  Discriminatorの学習
                 # ---------------------
     
-                # バッチサイズの半数をGeneratorから生成
+                # バッチサイズをGeneratorから生成
                 noise = np.random.normal(0, 1, (batch_size, self.z_dim))
                 gen_imgs = self.generator.predict(noise)
     
-                # バッチサイズの半数を教師データからピックアップ
+                # バッチサイズを教師データからピックアップ
                 idx = np.random.randint(0, X_train.shape[0], batch_size)
                 imgs = X_train[idx]
+
+                epsilon = np.random.uniform(size = (batch_size, 1,1,1))
+                errD_real, errD_fake = netD_train([imgs, noise, epsilon])
+                d_loss = errD_real - errD_fake
+
     
                 # discriminatorを学習
                 # 本物データと偽物データは一緒に学習させる
-                d_loss = self.discriminator_3samples.train_on_batch([imgs, noise],\
-                                                    [positive_y, negative_y, dummy_y])
     
                 # discriminatorの予測（本物と偽物が半々のミニバッチ）
                 d_predict = self.discriminator.predict_classes(np.concatenate([gen_imgs,imgs]), verbose=0)
@@ -260,15 +291,16 @@ class WGAN_GP():
             valid_y = np.array([1] * batch_size)
 
             # Train the generator
+            g_loss = self.combined.train_on_batch(noise, valid_y)
 
 
             # 進捗の表示
-            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
+            print ("%d [D loss: %f] [G loss: %f]" % (epoch, d_loss, g_loss))
 
             # np.ndarrayにloss関数を格納
             self.g_loss_array[epoch] = g_loss
-            self.d_loss_array[epoch] = d_loss[0]
-            self.d_accuracy_array[epoch] = 100*d_loss[1]
+            self.d_loss_array[epoch] = d_loss
+            self.d_accuracy_array[epoch] = d_loss
             self.d_predict_true_num_array[epoch] = d_predict
             self.c_predict_class_list.append(c_predict)
 
