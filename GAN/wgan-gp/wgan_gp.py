@@ -32,7 +32,7 @@ class WGAN_GP():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 500
+        self.z_dim = 100
 
         self.n_critic = 5
 
@@ -58,7 +58,7 @@ class WGAN_GP():
         self.c_predict_class_list = []
 
         #discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
-        combined_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
+        combined_optimizer = Adam(lr=1e-5, beta_1=0.5, beta_2=0.9)
 
         # discriminatorモデル
         self.discriminator = self.build_discriminator()
@@ -82,9 +82,6 @@ class WGAN_GP():
                                         loss=self.wasserstein_loss)
 										#metrics=['accuracy'])
 
-        self.g_loss = -1*K.mean(self.combined(noise))
-		self.g_updates = Adam(lr=0.0001, beta_1=0.5, beta_2=0.9).get_updates(self.discriminator.trainable_weights,[],self.g_loss)
-		netG_train = K.function([
 
         for layer in self.discriminator.layers:
             layer.trainable = True
