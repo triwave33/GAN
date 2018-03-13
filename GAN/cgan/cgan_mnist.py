@@ -17,64 +17,115 @@ from keras.datasets import mnist
 from keras.optimizers import Adam
 from PIL import Image
 
-
-WIDTH = 28
-HEIGHT = 28
-Z_DIM =30
-CLASS_NUM = 10
-
 BATCH_SIZE = 32
 NUM_EPOCH = 50
-GENERATED_IMAGE_PATH = '/volumes/data/dataset/gan/cgan_generated_images/' # 生成画像の保存先
-#GENERATED_IMAGE_PATH = 'generated_images/' # 生成画像の保存先
+CLASS_NUM = 10
 
-def generator_model():
-  model = Sequential()
-  model.add(Dense(input_dim=(Z_DIM+CLASS_NUM), output_dim=1024)) # z=100, y=10
-  model.add(BatchNormalization())
-  model.add(Activation('relu'))
-  model.add(Dense(128*7*7))
-  model.add(BatchNormalization())
-  model.add(Activation('relu'))
-  model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
-  model.add(UpSampling2D((2,2)))
-  model.add(Convolution2D(64,5,5,border_mode='same'))
-  model.add(BatchNormalization())
-  model.add(Activation('relu'))
-  model.add(UpSampling2D((2,2)))
-  model.add(Convolution2D(1,5,5,border_mode='same'))
-  model.add(Activation('tanh'))
-  return model
+class ACGAN():
+ 
+    def __init__(self):
+        self.path = '/volumes/data/dataset/gan/cgan_generated_images/'
+        #mnistデータ用の入力データサイズ
+        self.img_rows = 28
+        self.img_cols = 28
+        self.channels = 1
+        self.img_shape = (self.img_rows, self.img_cols, self.channels)
 
-def discriminator_model():
-  model = Sequential()
-  model.add(Convolution2D(64,5,5,\
-        subsample=(2,2),\
-        border_mode='same',\
-        input_shape=(WIDTH,HEIGHT,(1+CLASS_NUM))))
-  model.add(LeakyReLU(0.2))
-  model.add(Convolution2D(128,5,5,subsample=(2,2)))
-  model.add(LeakyReLU(0.2))
-  model.add(Flatten())
-  model.add(Dense(256))
-  model.add(LeakyReLU(0.2))
-  model.add(Dropout(0.5))
-  model.add(Dense(1))
-  model.add(Activation('sigmoid'))
-  return model
+        # 潜在変数の次元数 
+        self.z_dim  =100
+        
+        self.n_critic = 5
 
-def generator_containing_discriminator(g,d):
-  noise_input = Input(shape=(Z_DIM,))
-  label_input = Input(shape=(CLASS_NUM,))
-  label_10ch_input = Input(shape=(WIDTH,HEIGHT,CLASS_NUM,))
-  input = merge([noise_input, label_input],mode='concat',concat_axis=-1)
+        # 画像保存の際の列、行数
+        self.row = 5
+        self.col = 5
+        self.row2 = 1 # 連続潜在変数用
+        self.col2 = 10# 連続潜在変数用 
 
-  x_generator = g(input) # [batch, WIDTH, HEIGHT, channel=1]
-  merged = merge([x_generator, label_10ch_input],mode='concat', concat_axis=3)
-  d.trainable= False
-  x_discriminator = d(merged)
-  model = Model(input = [noise_input, label_input, label_10ch_input], output = x_discriminator)
-  return model
+        
+        # 画像生成用の固定された入力潜在変数
+        self.noise_fix1 = np.random.normal(0, 1, (self.row * self.col, self.z_dim)) 
+        # 連続的に潜在変数を変化させる際の開始、終了変数
+        self.noise_fix2 = np.random.normal(0, 1, (1, self.z_dim))
+        self.noise_fix3 = np.random.normal(0, 1, (1, self.z_dim))
+
+        # 横軸がiteration数のプロット保存用np.ndarray
+        self.g_loss_array = np.array([])
+        self.d_loss_array = np.array([])
+        self.d_accuracy_array = np.array([])
+        self.d_predict_true_num_array = np.array([])
+        self.c_predict_class_list = []
+
+        #discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
+        combined_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
+
+        # discriminatorモデル
+        self.discriminator = self.build_discriminator()
+        self.discriminator.compile(loss='binary_crossentropy', 
+            optimizer=discriminator_optimizer,
+            metrics=['accuracy'])
+
+        # Generatorモデル
+        self.generator = self.build_generator()
+        # generatorは単体で学習しないのでコンパイルは必要ない
+        #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
+
+        self.combined = self.build_combined1()
+        #self.combined = self.build_combined2()
+        self.combined.compile(loss='binary_crossentropy', optimizer=combined_optimizer)
+
+        # Classifierモデル
+        self.classifier = self.build_classifier()
+
+
+
+    def generator_model(self):
+        model = Sequential()
+        model.add(Dense(input_dim=(self.z_dim + CLASS_NUM), output_dim=1024)) # z=100, y=10
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Dense(128*7*7))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
+        model.add(UpSampling2D((2,2)))
+        model.add(Convolution2D(64,5,5,border_mode='same'))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
+        model.add(UpSampling2D((2,2)))
+        model.add(Convolution2D(1,5,5,border_mode='same'))
+        model.add(Activation('tanh'))
+        return model
+
+    def discriminator_model(self):
+        model = Sequential()
+        model.add(Convolution2D(64,5,5,\
+              subsample=(2,2),\
+              border_mode='same',\
+              input_shape=(self.img_rows,self.img_cols,(1+CLASS_NUM))))
+        model.add(LeakyReLU(0.2))
+        model.add(Convolution2D(128,5,5,subsample=(2,2)))
+        model.add(LeakyReLU(0.2))
+        model.add(Flatten())
+        model.add(Dense(256))
+        model.add(LeakyReLU(0.2))
+        model.add(Dropout(0.5))
+        model.add(Dense(1))
+        model.add(Activation('sigmoid'))
+        return model
+
+    def combined_model(self):
+        z = Input(shape=(self.z_dim,))
+        y = Input(shape=(CLASS_NUM,))
+        img_10 = Input(shape=(WIDTH,HEIGHT,CLASS_NUM,))
+        z_y = merge([z, y],mode='concat',concat_axis=-1)
+      
+        img = self.generator(z_y) # [batch, WIDTH, HEIGHT, channel=1]
+        img_11 = merge([img, img_10],mode='concat', concat_axis=3)
+        d.trainable= False
+        valid = self.discriminator(img_11)
+        model = Model(input = [z, y, img_10], output = valid)
+        return model
 
 def combine_images(generated_images):
   total = generated_images.shape[0]
