@@ -32,7 +32,7 @@ class WGAN_GP():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 1
+        self.z_dim = 5
 
         self.n_critic = 5
 
