@@ -32,7 +32,7 @@ class WGAN_GP():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         
         # 潜在変数の次元数 
-        self.z_dim = 100
+        self.z_dim = 1
 
         self.n_critic = 5
 
@@ -165,8 +165,7 @@ class WGAN_GP():
         model = Model(z, valid)
         model.summary()
         loss = -1. * K.mean(valid)
-        training_updates = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)\
-                            .get_updates(self.generator.trainable_weights,[],loss)
+        training_updates = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9).get_updates(self.generator.trainable_weights,[],loss)
 
         g_train = K.function([z],\
                                 [loss],    \
@@ -202,32 +201,46 @@ class WGAN_GP():
         return model, partial_gp_loss
 
     def build_discriminator_with_own_loss(self):
+
+        ##モデルの定義
+        # generatorの入力
+        z = Input(shape=(self.z_dim,))
+
+        # discriimnatorの入力
+        f_img = self.generator(z)
         img_shape = (self.img_rows, self.img_cols, self.channels)
-        img_input = Input(shape=(img_shape))
-        g_input = Input(shape=(self.z_dim,))
-        g_output = self.generator(g_input)
-
+        r_img = Input(shape=(img_shape))
         e_input = K.placeholder(shape=(None,1,1,1))
-        mixed_input = Input(shape=(img_shape),\
-                        tensor=e_input * img_input + (1-e_input) * g_output)
+        a_img = Input(shape=(img_shape),\
+        tensor=e_input * r_img + (1-e_input) * f_img)
 
-        loss_real = K.mean(self.discriminator(img_input))
-        loss_fake = K.mean(self.discriminator(g_output))
+        # discriminatorの出力
+        f_out = self.discriminator(f_img)
+        r_out = self.discriminator(r_img)
+        a_out = self.discriminator(a_img)
+        ##モデルの定義終了
 
-        grad_mixed = K.gradients(self.discriminator(mixed_input),\
-                        [mixed_input])[0]
+        # 損失関数を定義する
+        # original critic loss
+        loss_real = K.mean(r_out) / BATCH_SIZE
+        loss_fake = K.mean(f_out) / BATCH_SIZE
+
+        # gradient penalty
+        grad_mixed = K.gradients(a_out, [a_img])[0]
         norm_grad_mixed = K.sqrt(K.sum(K.square(grad_mixed), axis=[1,2,3]))
         grad_penalty = K.mean(K.square(norm_grad_mixed -1))
 
+        # 最終的な損失関数
         loss = loss_fake - loss_real + GRADIENT_PENALTY_WEIGHT * grad_penalty
 
+        # オプティマイザーと損失関数、学習する重みを指定する
         training_updates = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)\
                             .get_updates(self.discriminator.trainable_weights,[],loss)
 
-        d_train = K.function([img_input, g_input, e_input],\
+        # 入出力とtraining_updatesをfunction化
+        d_train = K.function([r_img, z, e_input],\
                                 [loss_real, loss_fake],    \
-                                training_updates)
-
+                                 training_updates)
         return d_train
 
  
