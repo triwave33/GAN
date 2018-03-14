@@ -24,7 +24,8 @@ CLASS_NUM = 10
 class CGAN():
  
     def __init__(self):
-        self.path = '/volumes/data/dataset/gan/cgan_generated_images/'
+        #self.path = '/volumes/data/dataset/gan/cgan_generated_images/'
+        self.path = 'images/'
         #mnistデータ用の入力データサイズ
         self.img_rows = 28
         self.img_cols = 28
@@ -174,19 +175,19 @@ class CGAN():
       
             for index in range(num_batches):
                 # generator用データ整形
-                noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(BATCH_SIZE)])
-                randomLabel_batch = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
-                randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
-                noise_with_randomLabel = np.concatenate((noise, randomLabel_batch_onehot),axis=1) # zとyを結合
-                generated_images = generator.predict(noise_with_randomLabel, verbose=0)
-                randomLabel_batch_image = np.array([self.label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
-                generated_images_11ch = np.concatenate((generated_images, randomLabel_batch_image),axis=3)
+                noise_z = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(BATCH_SIZE)])
+                noise_y_int = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
+                noise_y = np.array([self.label2onehot(i) for i in noise_y_int]) #shape[0]:batch, shape[1]:class
+                noise_z_y = np.concatenate((noise_z, noise_y),axis=1) # zとyを結合
+                f_img = generator.predict(noise_z_y, verbose=0)
+                f_img_10 = np.array([self.label2images(i) for i in noise_y_int]) # 生成データラベルの10ch画像
+                f_img_11 = np.concatenate((f_img, f_img_10),axis=3)
       
                 # discriminator用データ整形
-                image_batch = X_train[index*BATCH_SIZE:(index+1)*BATCH_SIZE] # 実データの画像
+                r_img = X_train[index*BATCH_SIZE:(index+1)*BATCH_SIZE] # 実データの画像
                 label_batch = y_train[index*BATCH_SIZE:(index+1)*BATCH_SIZE] # 実データのラベル
-                label_batch_image = np.array([self.label2images(i) for i in label_batch]) # 実データラベルの10ch画像
-                image_batch_11ch = np.concatenate((image_batch, label_batch_image),axis=3)
+                r_img_10 = np.array([self.label2images(i) for i in label_batch]) # 実データラベルの10ch画像
+                r_img_11 = np.concatenate((r_img, r_img_10),axis=3)
       
                 ''' 
                 # 生成画像を出力
@@ -214,18 +215,18 @@ class CGAN():
       
       
                 # discriminatorを更新
-                X = np.concatenate((image_batch_11ch, generated_images_11ch))
+                X = np.concatenate((r_img_11, f_img_11))
                 y = [1]*BATCH_SIZE + [0]*BATCH_SIZE
-                print(X.shape)
+                y = np.array(y)
                 #print(y.shape)
                 d_loss = discriminator.train_on_batch(X, y)
       
                 # generatorを更新
                 noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(BATCH_SIZE)])
                 randomLabel_batch = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
-                randomLabel_batch_onehot = np.array([label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
-                randomLabel_batch_image = np.array([label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
-                g_loss = dcgan.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], [1]*BATCH_SIZE)
+                randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
+                randomLabel_batch_image = np.array([self.label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
+                g_loss = combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
                 print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss))
   
             generator.save_weights('generator.h5')

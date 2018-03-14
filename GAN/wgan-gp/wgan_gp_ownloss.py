@@ -23,8 +23,8 @@ TRAINING_RATIO = 5
 class WGAN_GP():
     
     def __init__(self):
-        self.path = "/volumes/data/dataset/gan/MNIST/wgan-gp/wgan-gp_generated_images/"
-        #self.path = "images/"
+        #self.path = "/volumes/data/dataset/gan/MNIST/wgan-gp/wgan-gp_generated_images/"
+        self.path = "images/"
         #mnistデータ用の入力データサイズ
         self.img_rows = 28 
         self.img_cols = 28
@@ -62,29 +62,17 @@ class WGAN_GP():
 
         # discriminatorモデル
         self.discriminator = self.build_discriminator()
-        #self.discriminator.compile(loss=self.wasserstein_loss, 
-        #    optimizer=discriminator_optimizer,
-        #    metrics=['accuracy'])
 
 
         # Generatorモデル
         self.generator = self.build_generator()
-        # generatorは単体で学習しないのでコンパイルは必要ない
-        #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
 
         # combinedモデルの学習時はdiscriminatorの学習をFalseにする
         for layer in self.discriminator.layers:
             layer.trainable = False
         self.discriminator.trainable = False
 
-        #self.combined = self.build_combined1()
-        #self.combined, self.g_train = self.build_combined2()
-        self.netG_model, self.netG_train = self.build_combined2()
-
-        #self.combined.compile(optimizer= Adam(1e-4, beta_1=0.5, beta_2=0.9),\
-        #                                loss=self.wasserstein_loss)
-        #                                #metrics=['accuracy'])
-
+        self.netG_model, self.netG_train = self.build_combined()
 
         for layer in self.discriminator.layers:
             layer.trainable = True
@@ -97,22 +85,6 @@ class WGAN_GP():
         self.classifier = self.build_classifier()
 
         self.netD_train = self.build_discriminator_with_own_loss()
-        #(self.discriminator_3samples, self.partial_gp_loss) = self.build_discriminator_3samples()
-        #self.discriminator_3samples.compile(optimizer=Adam(0.0001, beta_1=0.5, beta_2=0.9),\
-        #                                loss=[self.wasserstein_loss,\
-        #                                self.wasserstein_loss,\
-        #                                self.partial_gp_loss])
-
-
-    def wasserstein_loss(self, y_true, y_pred):
-        return K.mean(y_true * y_pred)
-
-    def gradient_penalty_loss(self, y_true, y_pred, averaged_samples, gradient_penalty_weight):
-        gradients = K.gradients(K.sum(y_pred), averaged_samples)
-        gradient_l2_norm = K.sqrt(K.sum(K.square(gradients)))
-        gradient_penalty = gradient_penalty_weight * K.square(1 - gradient_l2_norm)
-        return gradient_penalty
-
 
     def build_generator(self):
 
@@ -154,11 +126,7 @@ class WGAN_GP():
         #model.add(Activation('sigmoid'))    #sigmoid関数は使わない
         return model
     
-    def build_combined1(self):
-        model = Sequential([self.generator, self.discriminator])
-        return model
-
-    def build_combined2(self):
+    def build_combined(self):
         z = Input(shape=(self.z_dim,))
         img = self.generator(z)
         valid = self.discriminator(img)
@@ -178,27 +146,6 @@ class WGAN_GP():
         model.load_weights('cnn_weight.h5')
         return model
 
-
-    def build_discriminator_3samples(self):
-        img_shape = (self.img_rows, self.img_cols, self.channels)
-        img_input = Input(shape=(img_shape))
-        g_input = Input(shape=(self.z_dim,))
-        g_output = self.generator(g_input)
-        d_output_gen = self.discriminator(g_output)
-        d_output_real = self.discriminator(img_input)
-
-         # 本物データと偽物データの平均サンプルをとる
-        averaged_samples = RandomWeightedAverage()([img_input, g_output])
-        d_output_ave = self.discriminator(averaged_samples)
-
-        partial_gp_loss = partial(self.gradient_penalty_loss, \
-                            averaged_samples=averaged_samples,\
-                            gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT)
-        partial_gp_loss.__name__ = 'gradient_penalty'
-
-        model = Model(inputs=[img_input, g_input],\
-                      outputs=[d_output_real, d_output_gen, d_output_ave])
-        return model, partial_gp_loss
 
     def build_discriminator_with_own_loss(self):
 
@@ -243,8 +190,6 @@ class WGAN_GP():
                                  training_updates)
         return d_train
 
- 
-      
 
     def build_classifier(self):
         model = load_model("cnn_model.h5")
@@ -272,9 +217,6 @@ class WGAN_GP():
         positive_y = np.ones((batch_size, 1), dtype=np.float32)
         negative_y = -positive_y
         dummy_y = np.zeros((batch_size, 1), dtype=np.float32)
-
-        #netD_train = self.build_discriminator_with_own_loss()
-        #netG_model, netG_train = self.build_combined2()
 
         for epoch in range(epochs):
 
