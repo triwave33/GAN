@@ -20,12 +20,13 @@ from PIL import Image
 BATCH_SIZE = 32
 NUM_EPOCH = 50
 CLASS_NUM = 10
+IMG_TOTAL_NUM = 100
 
 class CGAN():
  
     def __init__(self):
-        #self.path = '/volumes/data/dataset/gan/cgan_generated_images/'
-        self.path = 'images/'
+        self.path = '/volumes/data/dataset/gan/MNIST/cgan/cgan_generated_images/'
+        #self.path = 'images/'
         #mnistデータ用の入力データサイズ
         self.img_rows = 28
         self.img_cols = 28
@@ -35,7 +36,6 @@ class CGAN():
         # 潜在変数の次元数 
         self.z_dim  =100
         
-        self.n_critic = 5
 
         # 画像保存の際の列、行数
         self.row = 5
@@ -57,7 +57,7 @@ class CGAN():
         self.d_predict_true_num_array = np.array([])
         self.c_predict_class_list = []
 
-        self.discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
+        self.discriminator_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
         self.combined_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
 
         # discriminatorモデル
@@ -71,9 +71,22 @@ class CGAN():
         # generatorは単体で学習しないのでコンパイルは必要ない
         #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
 
+        for layer in self.discriminator.layers:
+            layer.trainable = False
+        self.discriminator.trainable=False
+
+
         self.combined = self.build_combined()
         #self.combined = self.build_combined2()
         self.combined.compile(loss='binary_crossentropy', optimizer=self.combined_optimizer)
+
+        for layer in self.discriminator.layers:
+            layer.trainable = True
+        for layer in self.generator.layers:
+            layer.trainable = False
+        self.discriminator.trainable = True
+        self.generator.trainable = False
+
 
         # Classifierモデル
         #self.classifier = self.build_classifier()
@@ -123,7 +136,7 @@ class CGAN():
       
         img = self.generator(z_y) # [batch, WIDTH, HEIGHT, channel=1]
         img_11 = merge([img, img_10],mode='concat', concat_axis=3)
-        self.discriminator.trainable= False
+        #self.discriminator.trainable= False
         valid = self.discriminator(img_11)
         model = Model(input = [z, y, img_10], output = valid)
         return model
@@ -158,7 +171,8 @@ class CGAN():
         X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2],1)
       
         discriminator = self.build_discriminator()
-        d_opt = Adam(lr=1e-5, beta_1=0.1)
+        d_opt = Adam(lr=1e-6, beta_1=0.1)
+        #d_opt = Adam(lr=1e-5, beta_1=0.1)
         discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
       
         # generator+discriminator （discriminator部分の重みは固定）
@@ -166,7 +180,8 @@ class CGAN():
         generator = self.build_generator()
         combined = self.build_combined()
       
-        g_opt = Adam(lr=.8e-4, beta_1=0.5)
+        g_opt = Adam(lr=8e-4, beta_1=0.5)
+        #g_opt = Adam(lr=8e-4, beta_1=0.5)
         combined.compile(loss='binary_crossentropy', optimizer=g_opt)
       
         num_batches = int(X_train.shape[0] / BATCH_SIZE)
@@ -201,8 +216,8 @@ class CGAN():
                 '''
                 # 生成画像を出力
                 if index % 500 == 0:
-                    noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(BATCH_SIZE)])
-                    randomLabel_batch = np.arange(BATCH_SIZE)%10  # label番号を生成する乱数,BATCH_SIZE長
+                    noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(IMG_TOTAL_NUM)])
+                    randomLabel_batch = np.arange(IMG_TOTAL_NUM)%10  # label番号を生成する乱数,BATCH_SIZE長
                     randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
                     noise_with_randomLabel = np.concatenate((noise, randomLabel_batch_onehot),axis=1) # zとyを結合
                     generated_images = generator.predict(noise_with_randomLabel, verbose=0)
