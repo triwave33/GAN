@@ -1,4 +1,4 @@
-### -*- coding:utf-8 -*-
+## -*- coding:utf-8 -*-
 
 import keras
 from keras.models import Sequential, Model
@@ -57,8 +57,8 @@ class CGAN():
         self.d_predict_true_num_array = np.array([])
         self.c_predict_class_list = []
 
-        self.discriminator_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
-        self.combined_optimizer = Adam(lr=1e-4, beta_1=0.5, beta_2=0.9)
+        self.discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
+        self.combined_optimizer = Adam(lr=.8e-4, beta_1=0.5)
 
         # discriminatorモデル
         self.discriminator = self.build_discriminator()
@@ -66,26 +66,28 @@ class CGAN():
             optimizer=self.discriminator_optimizer,
             metrics=['accuracy'])
 
+        #for layer in self.discriminator.layers:
+        #    layer.trainable = False
+        self.discriminator.trainable=False
+
+
         # Generatorモデル
         self.generator = self.build_generator()
         # generatorは単体で学習しないのでコンパイルは必要ない
         #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
 
-        for layer in self.discriminator.layers:
-            layer.trainable = False
-        self.discriminator.trainable=False
-
 
         self.combined = self.build_combined()
         #self.combined = self.build_combined2()
-        self.combined.compile(loss='binary_crossentropy', optimizer=self.combined_optimizer)
+        self.combined.compile(loss='binary_crossentropy', optimizer=self.combined_optimizer,\
+        metrics=['accuracy'])
 
-        for layer in self.discriminator.layers:
-            layer.trainable = True
-        for layer in self.generator.layers:
-            layer.trainable = False
-        self.discriminator.trainable = True
-        self.generator.trainable = False
+        #for layer in self.discriminator.layers:
+        #    layer.trainable = True
+        #for layer in self.generator.layers:
+        #    layer.trainable = False
+        #self.discriminator.trainable = True
+        #self.generator.trainable = False
 
 
         # Classifierモデル
@@ -136,7 +138,7 @@ class CGAN():
       
         img = self.generator(z_y) # [batch, WIDTH, HEIGHT, channel=1]
         img_11 = merge([img, img_10],mode='concat', concat_axis=3)
-        #self.discriminator.trainable= False
+        self.discriminator.trainable= False
         valid = self.discriminator(img_11)
         model = Model(input = [z, y, img_10], output = valid)
         return model
@@ -170,19 +172,17 @@ class CGAN():
         X_train = (X_train.astype(np.float32) - 127.5)/127.5
         X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2],1)
       
-        discriminator = self.build_discriminator()
-        d_opt = Adam(lr=1e-6, beta_1=0.1)
+        #discriminator = self.build_discriminator()
         #d_opt = Adam(lr=1e-5, beta_1=0.1)
-        discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
+        #discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
       
-        # generator+discriminator （discriminator部分の重みは固定）
-        discriminator.trainable = False
-        generator = self.build_generator()
-        combined = self.build_combined()
+        ## generator+discriminator （discriminator部分の重みは固定）
+        #discriminator.trainable = False
+        #generator = self.build_generator()
+        #combined = self.build_combined()
       
-        g_opt = Adam(lr=8e-4, beta_1=0.5)
         #g_opt = Adam(lr=8e-4, beta_1=0.5)
-        combined.compile(loss='binary_crossentropy', optimizer=g_opt)
+        #combined.compile(loss='binary_crossentropy', optimizer=g_opt)
       
         num_batches = int(X_train.shape[0] / BATCH_SIZE)
         print('Number of batches:', num_batches)
@@ -194,7 +194,7 @@ class CGAN():
                 noise_y_int = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
                 noise_y = np.array([self.label2onehot(i) for i in noise_y_int]) #shape[0]:batch, shape[1]:class
                 noise_z_y = np.concatenate((noise_z, noise_y),axis=1) # zとyを結合
-                f_img = generator.predict(noise_z_y, verbose=0)
+                f_img = self.generator.predict(noise_z_y, verbose=0)
                 f_img_10 = np.array([self.label2images(i) for i in noise_y_int]) # 生成データラベルの10ch画像
                 f_img_11 = np.concatenate((f_img, f_img_10),axis=3)
       
@@ -204,23 +204,13 @@ class CGAN():
                 r_img_10 = np.array([self.label2images(i) for i in label_batch]) # 実データラベルの10ch画像
                 r_img_11 = np.concatenate((r_img, r_img_10),axis=3)
       
-                ''' 
-                # 生成画像を出力
-                if index % 500 == 0:
-                    image = combine_images(generated_images)
-                    image = image*127.5 + 127.5
-                    if not os.path.exists(self.path):
-                        os.mkdir(self.path)
-                    Image.fromarray(image.astype(np.uint8))\
-                        .save(self.path+"%04d_%04d.png" % (epoch, index))
-                '''
                 # 生成画像を出力
                 if index % 500 == 0:
                     noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(IMG_TOTAL_NUM)])
                     randomLabel_batch = np.arange(IMG_TOTAL_NUM)%10  # label番号を生成する乱数,BATCH_SIZE長
                     randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
                     noise_with_randomLabel = np.concatenate((noise, randomLabel_batch_onehot),axis=1) # zとyを結合
-                    generated_images = generator.predict(noise_with_randomLabel, verbose=0)
+                    generated_images = self.generator.predict(noise_with_randomLabel, verbose=0)
                     image = self.combine_images(generated_images)
                     image = image*127.5 + 127.5
                     if not os.path.exists(self.path):
@@ -234,18 +224,18 @@ class CGAN():
                 y = [1]*BATCH_SIZE + [0]*BATCH_SIZE
                 y = np.array(y)
                 #print(y.shape)
-                d_loss = discriminator.train_on_batch(X, y)
+                d_loss = self.discriminator.train_on_batch(X, y)
       
                 # generatorを更新
                 noise = np.array([np.random.uniform(-1, 1, self.z_dim) for _ in range(BATCH_SIZE)])
                 randomLabel_batch = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
                 randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
                 randomLabel_batch_image = np.array([self.label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
-                g_loss = combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
-                print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss))
+                g_loss = self.combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
+                print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss[0], d_loss[0]))
   
-            generator.save_weights('generator.h5')
-            discriminator.save_weights('discriminator.h5')
+            self.generator.save_weights('generator.h5')
+            self.discriminator.save_weights('discriminator.h5')
 
 if __name__ == '__main__':
     gan = CGAN()
