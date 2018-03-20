@@ -25,8 +25,8 @@ IMG_TOTAL_NUM = 100
 class CGAN():
  
     def __init__(self):
-        self.path = '/volumes/data/dataset/gan/MNIST/cgan/cgan_generated_images/'
-        #self.path = 'images/'
+        #self.path = '/volumes/data/dataset/gan/MNIST/cgan/cgan_generated_images/'
+        self.path = 'images/'
         #mnistデータ用の入力データサイズ
         self.img_rows = 28
         self.img_cols = 28
@@ -114,7 +114,7 @@ class CGAN():
         return model
 
     def build_discriminator(self):
- .       model = Sequential()
+        model = Sequential()
         model.add(Convolution2D(64,5,5,\
               subsample=(2,2),\
               border_mode='same',\
@@ -172,36 +172,24 @@ class CGAN():
         X_train = (X_train.astype(np.float32) - 127.5)/127.5
         X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2],1)
       
-<<<<<<< HEAD
         discriminator = self.build_discriminator()
         d_opt = Adam(lr=1e-5, beta_1=0.1)
         discriminator.compile(loss='binary_crossentropy', optimizer=d_opt, metrics=['accuracy'])
-=======
-        #discriminator = self.build_discriminator()
-        #d_opt = Adam(lr=1e-5, beta_1=0.1)
-        #discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
->>>>>>> 6df826ef014980c595886f58b04c1361e07db32b
       
         ## generator+discriminator （discriminator部分の重みは固定）
         #discriminator.trainable = False
         #generator = self.build_generator()
         #combined = self.build_combined()
       
-<<<<<<< HEAD
         g_opt = Adam(lr=.8e-4, beta_1=0.5)
-        combined.compile(loss='binary_crossentropy', optimizer=g_opt)
+        self.combined.compile(loss='binary_crossentropy', optimizer=g_opt)
 
         # 学習結果を格納
-        self.g_loss_array = np.zeros(epochs)
-        self.d_loss_array = np.zeros(epochs)
-        self.d_accuracy_array = np.zeros(epochs)
-        self.d_predict_true_num_array = np.zeros(epochs)
+        self.g_loss_array = np.zeros(NUM_EPOCH)
+        self.d_loss_array = np.zeros(NUM_EPOCH)
+        self.d_accuracy_array = np.zeros(NUM_EPOCH)
+        self.d_predict_true_num_array = np.zeros(NUM_EPOCH)
 
-=======
-        #g_opt = Adam(lr=8e-4, beta_1=0.5)
-        #combined.compile(loss='binary_crossentropy', optimizer=g_opt)
-      
->>>>>>> 6df826ef014980c595886f58b04c1361e07db32b
         num_batches = int(X_train.shape[0] / BATCH_SIZE)
         print('Number of batches:', num_batches)
 
@@ -251,18 +239,13 @@ class CGAN():
                 randomLabel_batch = np.random.randint(0,CLASS_NUM,BATCH_SIZE) # label番号を生成する乱数,BATCH_SIZE長
                 randomLabel_batch_onehot = np.array([self.label2onehot(i) for i in randomLabel_batch]) #shape[0]:batch, shape[1]:class
                 randomLabel_batch_image = np.array([self.label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
-<<<<<<< HEAD
-                g_loss = combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
-                print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss))
+                g_loss = self.combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
+                print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss[0]))
 
             # np.ndarrayにloss関数を格納
             self.g_loss_array[epoch] = g_loss0
             self.d_loss_array[epoch] = d_loss[0]
             self.d_accuracy_array[epoch] = 100. * d_loss[1]
-=======
-                g_loss = self.combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
-                print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss[0], d_loss[0]))
->>>>>>> 6df826ef014980c595886f58b04c1361e07db32b
   
             self.generator.save_weights('generator.h5')
             self.discriminator.save_weights('discriminator.h5')
