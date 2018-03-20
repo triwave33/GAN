@@ -33,7 +33,7 @@ class CGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
 
         # 潜在変数の次元数 
-        self.z_dim  =100
+        self.z_dim  =1000
         
         self.n_critic = 5
 
@@ -99,7 +99,7 @@ class CGAN():
         return model
 
     def build_discriminator(self):
-        model = Sequential()
+ .       model = Sequential()
         model.add(Convolution2D(64,5,5,\
               subsample=(2,2),\
               border_mode='same',\
@@ -159,7 +159,7 @@ class CGAN():
       
         discriminator = self.build_discriminator()
         d_opt = Adam(lr=1e-5, beta_1=0.1)
-        discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
+        discriminator.compile(loss='binary_crossentropy', optimizer=d_opt, metrics=['accuracy'])
       
         # generator+discriminator （discriminator部分の重みは固定）
         discriminator.trainable = False
@@ -168,9 +168,17 @@ class CGAN():
       
         g_opt = Adam(lr=.8e-4, beta_1=0.5)
         combined.compile(loss='binary_crossentropy', optimizer=g_opt)
-      
+
+        # 学習結果を格納
+        self.g_loss_array = np.zeros(epochs)
+        self.d_loss_array = np.zeros(epochs)
+        self.d_accuracy_array = np.zeros(epochs)
+        self.d_predict_true_num_array = np.zeros(epochs)
+
         num_batches = int(X_train.shape[0] / BATCH_SIZE)
         print('Number of batches:', num_batches)
+
+        ### 学習開始
         for epoch in range(NUM_EPOCH):
       
             for index in range(num_batches):
@@ -228,6 +236,11 @@ class CGAN():
                 randomLabel_batch_image = np.array([self.label2images(i) for i in randomLabel_batch]) # 生成データラベルの10ch画像
                 g_loss = combined.train_on_batch([noise, randomLabel_batch_onehot, randomLabel_batch_image], np.array([1]*BATCH_SIZE))
                 print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss))
+
+            # np.ndarrayにloss関数を格納
+            self.g_loss_array[epoch] = g_loss0
+            self.d_loss_array[epoch] = d_loss[0]
+            self.d_accuracy_array[epoch] = 100. * d_loss[1]
   
             generator.save_weights('generator.h5')
             discriminator.save_weights('discriminator.h5')
