@@ -153,8 +153,8 @@ class GAN():
                 print ("epoch:%d, iter:%d,  [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, iteration, d_loss[0], 100*d_loss[1], g_loss))
 
                 # save images 
-                if epoch % save_interval == 0:
-                    self.save_imgs(epoch)
+            if epoch % save_interval == 0:
+                self.save_imgs(epoch)
 
     def save_imgs(self, epoch):
         # row,col
