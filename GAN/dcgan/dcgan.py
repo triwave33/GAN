@@ -5,7 +5,7 @@ from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Convolution2D
+from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model, load_model
 
 from keras.optimizers import Adam
@@ -19,29 +19,31 @@ import numpy as np
 class DCGAN():
     
     def __init__(self):
-        self.path = "/volumes/data/dataset/gan/MNIST/dcgan/dcgan_generated_images/"
-        #mnistデータ用の入力データサイズ
+        self.path = "./images"
+
+        # datasize for mnist 
         self.img_rows = 28 
         self.img_cols = 28
         self.channels = 1
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        
-        # 潜在変数の次元数 
-        self.z_dim = 5
 
-        # 画像保存の際の列、行数
+        self.z_dim = 5
+        
+        ########## settings for image saving ###########
+        # for image saving
         self.row = 5
         self.col = 5
-        self.row2 = 1 # 連続潜在変数用
-        self.col2 = 10# 連続潜在変数用 
+        self.row2 = 1 # for latent space
+        self.col2 = 10# for latent space
         
-        # 画像生成用の固定された入力潜在変数
+        # as a noise "seed" for creating images from the same value
         self.noise_fix1 = np.random.normal(0, 1, (self.row * self.col, self.z_dim)) 
-        # 連続的に潜在変数を変化させる際の開始、終了変数
+        # for moving latent variable (z) from fix2 to fix3
         self.noise_fix2 = np.random.normal(0, 1, (1, self.z_dim))
         self.noise_fix3 = np.random.normal(0, 1, (1, self.z_dim))
 
-        # 横軸がiteration数のプロット保存用np.ndarray
+        ###############################################
+
         self.g_loss_array = np.array([])
         self.d_loss_array = np.array([])
         self.d_accuracy_array = np.array([])
@@ -51,22 +53,20 @@ class DCGAN():
         discriminator_optimizer = Adam(lr=1e-5, beta_1=0.1)
         combined_optimizer = Adam(lr=2e-4, beta_1=0.5)
 
-        # discriminatorモデル
+        # discriminator model
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy', 
             optimizer=discriminator_optimizer,
             metrics=['accuracy'])
 
-        # Generatorモデル
+        # Generator model
         self.generator = self.build_generator()
-        # generatorは単体で学習しないのでコンパイルは必要ない
-        #self.generator.compile(loss='binary_crossentropy', optimizer=optimizer)
 
         self.combined = self.build_combined1()
         #self.combined = self.build_combined2()
         self.combined.compile(loss='binary_crossentropy', optimizer=combined_optimizer)
 
-        # Classifierモデル
+        # Classifier model
         self.classifier = self.build_classifier()
 
     def build_generator(self):
@@ -81,11 +81,11 @@ class DCGAN():
         model.add(Activation('relu'))
         model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(64,5,5,border_mode='same'))
+        model.add(Conv2D(64,5,5,padding='same'))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(1,5,5,border_mode='same'))
+        model.add(Conv2D(1,5,5,padding='same'))
         model.add(Activation('tanh'))
         model.summary()
         return model
@@ -95,10 +95,10 @@ class DCGAN():
         img_shape = (self.img_rows, self.img_cols, self.channels)
         
         model = Sequential()
-        model.add(Convolution2D(64,5,5, subsample=(2,2),\
-                  border_mode='same', input_shape=img_shape))
+        model.add(Conv2D(64,5,5, strides=(2,2),\
+                  padding='same', input_shape=img_shape))
         model.add(LeakyReLU(0.2))
-        model.add(Convolution2D(128,5,5,subsample=(2,2)))
+        model.add(Conv2D(128,5,5, strides=(2,2)))
         model.add(LeakyReLU(0.2))
         model.add(Flatten())
         model.add(Dense(256))
@@ -121,7 +121,8 @@ class DCGAN():
         model = Model(z, valid)
         model.summary()
         return model
-
+    
+    # load extra model to classify the images created by generator
     def build_classifier(self):
         model = load_model("cnn_model.h5")
         model.load_weights('cnn_weight.h5')
@@ -131,81 +132,83 @@ class DCGAN():
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
-        # mnistデータの読み込み
+        # load mnist data
         (X_train, _), (_, _) = mnist.load_data()
 
-        # 値を-1 to 1に規格化
+        # normalization
         X_train = (X_train.astype(np.float32) - 127.5) / 127.5
         X_train = np.expand_dims(X_train, axis=3)
 
         half_batch = int(batch_size / 2)
 
+        num_batches = int(X_train.shape[0] / half_batch)
+        print('Number of batches:', num_batches)
+                                
         self.g_loss_array = np.zeros(epochs)
         self.d_loss_array = np.zeros(epochs)
         self.d_accuracy_array = np.zeros(epochs)
         self.d_predict_true_num_array = np.zeros(epochs)
 
         for epoch in range(epochs):
+            for iteration in range(num_batches):
 
-            # ---------------------
-            #  Discriminatorの学習
-            # ---------------------
+                # ---------------------
+                #  learn Discriminator
+                # ---------------------
 
-            # バッチサイズの半数をGeneratorから生成
-            noise = np.random.normal(0, 1, (half_batch, self.z_dim))
-            gen_imgs = self.generator.predict(noise)
-
-
-            # バッチサイズの半数を教師データからピックアップ
-            idx = np.random.randint(0, X_train.shape[0], half_batch)
-            imgs = X_train[idx]
-
-            # discriminatorを学習
-            # 本物データと偽物データは別々に学習させる
-            d_loss_real = self.discriminator.train_on_batch(imgs, np.ones((half_batch, 1)))
-            d_loss_fake = self.discriminator.train_on_batch(gen_imgs, np.zeros((half_batch, 1)))
-            # それぞれの損失関数を平均
-            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
-            # discriminatorの予測（本物と偽物が半々のミニバッチ）
-            d_predict = self.discriminator.predict_classes(np.concatenate([gen_imgs,imgs]), verbose=0)
-            d_predict = np.sum(d_predict)
-
-# classifierの予測
-            c_predict = self.classifier.predict_classes(np.concatenate([gen_imgs,imgs]), verbose=0)
+                # generate images (half batch size) from generato
+                noise = np.random.normal(0, 1, (half_batch, self.z_dim))
+                gen_imgs = self.generator.predict(noise)
 
 
-            # ---------------------
-            #  Generatorの学習
-            # ---------------------
+                # pickup images (half batch size) from dataset
+                idx = np.random.randint(0, X_train.shape[0], half_batch)
+                imgs = X_train[idx]
 
-            noise = np.random.normal(0, 1, (batch_size, self.z_dim))
+                # learn discriminator
+                d_loss_real = self.discriminator.train_on_batch(
+                                    imgs, np.ones((half_batch, 1)))
+                d_loss_fake = self.discriminator.train_on_batch(
+                                    gen_imgs, np.zeros((half_batch, 1)))
+                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+                # predict (half: fake images, half: real images)
+                d_predict = self.discriminator.predict_classes(
+                                np.concatenate([gen_imgs,imgs]), verbose=0)
+                d_predict = np.sum(d_predict)
+
+                # label prediction by classifier
+                c_predict = self.classifier.predict_classes(
+                                np.concatenate([gen_imgs,imgs]), verbose=0)
 
 
-            # 生成データの正解ラベルは本物（1） 
-            valid_y = np.array([1] * batch_size)
+                # ---------------------
+                #  learn Generator
+                # ---------------------
 
-            # Train the generator
-            g_loss = self.combined.train_on_batch(noise, valid_y)
+                noise = np.random.normal(0, 1, (batch_size, self.z_dim))
+                # label must be set to 1 for generator learning
+                valid_y = np.array([1] * batch_size)
 
+                # Train the generator
+                g_loss = self.combined.train_on_batch(noise, valid_y)
 
-            # 進捗の表示
-            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
+                # progress
+                print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
 
-            # np.ndarrayにloss関数を格納
-            self.g_loss_array[epoch] = g_loss
-            self.d_loss_array[epoch] = d_loss[0]
-            self.d_accuracy_array[epoch] = 100*d_loss[1]
-            self.d_predict_true_num_array[epoch] = d_predict
-            self.c_predict_class_list.append(c_predict)
+                self.g_loss_array[epoch] = g_loss
+                self.d_loss_array[epoch] = d_loss[0]
+                self.d_accuracy_array[epoch] = 100*d_loss[1]
+                self.d_predict_true_num_array[epoch] = d_predict
+                self.c_predict_class_list.append(c_predict)
 
             if epoch % save_interval == 0:
                 
-                # 毎回異なる乱数から画像を生成
+                # save images from random seed
                 self.save_imgs(self.row, self.col, epoch, '', noise)
-                # 毎回同じ値から画像を生成
+                # save images from fixed seed
                 self.save_imgs(self.row, self.col, epoch, 'fromFixedValue', self.noise_fix1)
-                # 二つの潜在変数の間の遷移画像を生成
+                # save transition images between two latent variables
                 total_images = self.row*self.col
                 noise_trans = np.zeros((total_images, self.z_dim))
                 for i in range(total_images):
@@ -213,7 +216,7 @@ class DCGAN():
                     noise_trans[i,:] = t * self.noise_fix2 + (1-t) * self.noise_fix3
                 self.save_imgs(self.row2, self.col2, epoch, 'trans', noise_trans)
 
-                # classifierに生成画像のクラス識別をさせる（10000サンプル）
+                # discriminate images generated from Generator (10000 samples)
                 noise = np.random.normal(0, 1, (10000, self.z_dim))
                 class_res = self.classifier.predict_classes(self.generator.predict(noise), verbose=0)
                 # plot histgram
@@ -223,8 +226,7 @@ class DCGAN():
                 plt.close()
 
 
-       
-                # 学習結果をプロット
+                # plot learning result
                 fig, ax = plt.subplots(4,1, figsize=(8.27,11.69))
                 ax[0].plot(self.g_loss_array[:epoch])
                 ax[0].set_title("g_loss")
@@ -238,7 +240,7 @@ class DCGAN():
                 fig.savefig(self.path + "training_%d.png" % epoch)
                 plt.close()
 
-        # 重みを保存
+        # save weights
         self.generator.save_weights(self.path + "generator_%s.h5" % epoch)
         self.discriminator.save_weights(self.path + "discriminator_%s.h5" % epoch)
 
@@ -246,12 +248,10 @@ class DCGAN():
             
 
     def save_imgs(self, row, col, epoch, filename, noise):
-        # row, col
-        # 生成画像を敷き詰めるときの行数、列数
     
         gen_imgs = self.generator.predict(noise)
     
-        # 生成画像を0-1に再スケール
+        # rescall generated images
         gen_imgs = 0.5 * gen_imgs + 0.5
     
     
@@ -269,7 +269,6 @@ class DCGAN():
                     axs[i,j].axis('off')
                     cnt += 1
 
-        #fig.savefig("images/mnist_%s_%d.png" % (filename, epoch))
         fig.suptitle("epoch: %5d" % epoch)
         fig.savefig(self.path + "mnist_%s_%d.png" % (filename, epoch))
         plt.close()
