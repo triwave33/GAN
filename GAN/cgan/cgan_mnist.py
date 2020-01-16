@@ -2,9 +2,9 @@
 
 import keras
 from keras.models import Sequential, Model
-from keras.layers import Dense, Activation, Reshape, merge, Input
+from keras.layers import Dense, Activation, Reshape, Concatenate, Input
 from keras.layers.normalization import BatchNormalization
-from keras.layers.convolutional import UpSampling2D, Convolution2D
+from keras.layers.convolutional import UpSampling2D, Convolution2D, Conv2D
 
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers import Flatten, Dropout
@@ -97,7 +97,7 @@ class CGAN():
 
     def build_generator(self):
         model = Sequential()
-        model.add(Dense(input_dim=(self.z_dim + CLASS_NUM), output_dim=1024)) # z=100, y=10
+        model.add(Dense(input_dim=(self.z_dim + CLASS_NUM), units=1024)) # z=100, y=10
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Dense(128*7*7))
@@ -105,22 +105,22 @@ class CGAN():
         model.add(Activation('relu'))
         model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(64,5,5,border_mode='same'))
+        model.add(Conv2D(64,(5,5),padding='same'))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(1,5,5,border_mode='same'))
+        model.add(Conv2D(1,(5,5),padding='same'))
         model.add(Activation('tanh'))
         return model
 
     def build_discriminator(self):
         model = Sequential()
-        model.add(Convolution2D(64,5,5,\
-              subsample=(2,2),\
-              border_mode='same',\
+        model.add(Conv2D(64,(5,5),\
+              strides=(2,2),\
+              padding='same',\
               input_shape=(self.img_rows,self.img_cols,(1+CLASS_NUM))))
         model.add(LeakyReLU(0.2))
-        model.add(Convolution2D(128,5,5,subsample=(2,2)))
+        model.add(Conv2D(128,(5,5),strides=(2,2)))
         model.add(LeakyReLU(0.2))
         model.add(Flatten())
         model.add(Dense(256))
@@ -134,13 +134,13 @@ class CGAN():
         z = Input(shape=(self.z_dim,))
         y = Input(shape=(CLASS_NUM,))
         img_10 = Input(shape=(self.img_rows,self.img_cols,CLASS_NUM,))
-        z_y = merge([z, y],mode='concat',concat_axis=-1)
+        z_y = Concatenate()([z, y])
 
         img = self.generator(z_y) # [batch, WIDTH, HEIGHT, channel=1]
-        img_11 = merge([img, img_10],mode='concat', concat_axis=3)
+        img_11 = Concatenate(axis=3)([img, img_10])
         self.discriminator.trainable= False
         valid = self.discriminator(img_11)
-        model = Model(input = [z, y, img_10], output = valid)
+        model = Model(inputs = [z, y, img_10], outputs = valid)
         return model
 
     def combine_images(self,generated_images):
