@@ -5,7 +5,7 @@ from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Convolution2D
+from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model, load_model
 from keras import backend as K
 from keras.layers.merge import _Merge
@@ -98,11 +98,11 @@ class WGAN_GP():
         model.add(LeakyReLU(0.2))
         model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(64,5,5,border_mode='same'))
+        model.add(Conv2D(64,(5,5),padding='same'))
         model.add(BatchNormalization())
         model.add(LeakyReLU(0.2))
         model.add(UpSampling2D((2,2)))
-        model.add(Convolution2D(1,5,5,border_mode='same'))
+        model.add(Conv2D(1,(5,5),padding='same'))
         model.add(Activation('tanh'))
         model.summary()
 
@@ -113,10 +113,10 @@ class WGAN_GP():
         img_shape = (self.img_rows, self.img_cols, self.channels)
         
         model = Sequential()
-        model.add(Convolution2D(64,5,5, subsample=(2,2),\
-                  border_mode='same', input_shape=img_shape))
+        model.add(Conv2D(64,(5,5), strides=(2,2),\
+                  padding='same', input_shape=img_shape))
         model.add(LeakyReLU(0.2))
-        model.add(Convolution2D(128,5,5,subsample=(2,2)))
+        model.add(Conv2D(128,(5,5),strides=(2,2)))
         model.add(LeakyReLU(0.2))
         model.add(Flatten())
         model.add(Dense(1024))

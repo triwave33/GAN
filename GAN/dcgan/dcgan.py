@@ -81,11 +81,11 @@ class DCGAN():
         model.add(Activation('relu'))
         model.add(Reshape((7,7,128), input_shape=(128*7*7,)))
         model.add(UpSampling2D((2,2)))
-        model.add(Conv2D(64,5,5,padding='same'))
+        model.add(Conv2D(64,(5,5),padding='same'))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(UpSampling2D((2,2)))
-        model.add(Conv2D(1,5,5,padding='same'))
+        model.add(Conv2D(1,(5,5),padding='same'))
         model.add(Activation('tanh'))
         model.summary()
         return model
@@ -95,10 +95,10 @@ class DCGAN():
         img_shape = (self.img_rows, self.img_cols, self.channels)
         
         model = Sequential()
-        model.add(Conv2D(64,5,5, strides=(2,2),\
+        model.add(Conv2D(64,(5,5), strides=(2,2),\
                   padding='same', input_shape=img_shape))
         model.add(LeakyReLU(0.2))
-        model.add(Conv2D(128,5,5, strides=(2,2)))
+        model.add(Conv2D(128,(5,5), strides=(2,2)))
         model.add(LeakyReLU(0.2))
         model.add(Flatten())
         model.add(Dense(256))
