@@ -58,10 +58,12 @@ All the scripts are refering to https://github.com/eriklindernoren/Keras-GAN . I
 
 <img src="https://user-images.githubusercontent.com/36175603/72491284-e9dddf00-385c-11ea-883f-a023f863f986.png" width="65%">
 
+<img src="https://user-images.githubusercontent.com/36175603/72491423-5062fd00-385d-11ea-9ff5-12366ac0859c.png" width="50%">
+
 
 [今さらGAN 聞けないGAN（7）conditional GANの生成画像](https://qiita.com/triwave33/items/d94e5291d45e1d2bdd40) on qiita (in Japanese)
 
-<img src="https://user-images.githubusercontent.com/36175603/72491423-5062fd00-385d-11ea-9ff5-12366ac0859c.png" width="50%">
+I hacked latent space flag from {0,0,0,0,...,0} to {0,0,0,1,...,0} so that genarated images are changed to "3".
 
 <img src="https://user-images.githubusercontent.com/36175603/72491549-b2bbfd80-385d-11ea-83c9-049339655838.gif" width="50%">
 
